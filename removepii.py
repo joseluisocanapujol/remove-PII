@@ -3,6 +3,23 @@
 
 import argparse
 import nltk
+def ensure_nltk_data():
+    """Ensure all required NLTK data is available."""
+    resources = [
+        'punkt',
+        'punkt_tab',
+        'averaged_perceptron_tagger',
+        'averaged_perceptron_tagger_eng',
+        'maxent_ne_chunker',
+        'maxent_ne_chunker_tab',
+        'words'
+    ]
+    for res in resources:
+        try:
+            nltk.data.find(res)
+        except LookupError:
+            nltk.download(res)
+
 import re
 import os
 import pathlib
@@ -54,6 +71,7 @@ def getNE(text, piiNE):
         set: The set of strings holding named entity PII.
     """
     # search for NLTK required data in this directory so the user doesn't need to download it separately
+    ensure_nltk_data()
     nltk.data.path.append(os.getcwd())
     # gets all of the named entities in the text
     ne = nltk.ne_chunk(nltk.pos_tag(nltk.word_tokenize(text)))
