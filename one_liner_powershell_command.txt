@@ -1,1 +1,0 @@
-python removepii.py -f example_1.txt example_1_cleaned.txt
