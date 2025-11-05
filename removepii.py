@@ -1,5 +1,5 @@
-# Author: Porter Zach
-# Python 3.9
+# Author: Porter Zach & Jose L. Ocana-Pujol
+# Python 3.12
 
 import argparse
 import nltk
@@ -192,7 +192,11 @@ def cleanString(text,
     cleaned = text
     for pii in piiSet:
         cleaned = cleaned.replace(pii, "XXXXX")
-    
+
+    # Mask directory paths inside the text
+    dir_pattern = re.compile(r'([A-Za-z]:\\[^ \n\r\t]+|/[^ \n\r\t]+)')
+    cleaned = re.sub(dir_pattern, lambda m: mask_directories(m.group()), cleaned)
+
     # return the cleaned text string
     return cleaned
 
@@ -220,6 +224,27 @@ def cleanFile(filePath, outputPath,
     if verbose: print("Writing clean text to " + outputPath + ".")
     # write the cleaned text to the output file
     writeFile(cleaned, outputPath)
+
+def mask_directories(path):
+    """
+    Masks directory information in a file path with 'XXXXX' to prevent exposing directory structures.
+    Example:
+        'C:\\Users\\Alice\\Documents\\file.txt' -> 'XXXXX\\file.txt'
+        '/home/alice/data/report.pdf' -> 'XXXXX/report.pdf'
+    """
+    # Normalize slashes for consistency
+    path = path.replace('\\', '/')
+    
+    # Split into components
+    parts = path.split('/')
+    
+    if len(parts) > 1:
+        # Mask everything except the last part (the file name)
+        parts[:-1] = ['XXXXX'] * (len(parts) - 1)
+        return '/'.join(parts)
+    else:
+        # If there’s no directory, return as is
+        return path
 
 # if this file is being executed on the command line, parse arguments and process the user's file or text
 if __name__ == "__main__":
