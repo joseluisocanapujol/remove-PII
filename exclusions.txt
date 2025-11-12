@@ -1,0 +1,142 @@
+project manager
+product manager
+program manager
+scrum master
+team lead
+developer
+software engineer
+data analyst
+data scientist
+business analyst
+system administrator
+network administrator
+security analyst
+cybersecurity analyst
+penetration tester
+ethical hacker
+cloud architect
+IT manager
+IT specialist
+technical writer
+consultant
+quality assurance
+QA engineer
+DevOps engineer
+site reliability engineer
+SRE
+firewall
+antivirus
+IDS
+IPS
+SIEM
+VPN
+cloud
+AWS
+Azure
+GCP
+Docker
+Kubernetes
+Git
+GitHub
+GitLab
+Jenkins
+Terraform
+Ansible
+Splunk
+Wireshark
+Metasploit
+Burp Suite
+Nmap
+Kali Linux
+Linux
+Windows
+macOS
+Active Directory
+PowerShell
+Bash
+Python
+Java
+JavaScript
+C++
+C#
+SQL
+MySQL
+PostgreSQL
+MongoDB
+NoSQL
+agile
+scrum
+kanban
+waterfall
+DevOps
+CI/CD
+ITIL
+COBIT
+ISO 27001
+NIST
+OWASP
+MITRE ATT&CK
+CMMI
+PRINCE2
+PMBOK
+server
+database
+network
+endpoint
+encryption
+authentication
+authorization
+token
+certificate
+key
+hash
+vulnerability
+exploit
+patch
+update
+incident
+response
+risk
+threat
+asset
+backup
+restore
+disaster recovery
+business continuity
+penetration testing
+red team
+blue team
+purple team
+zero-day
+malware
+ransomware
+phishing
+social engineering
+DDoS
+botnet
+stakeholder
+deliverable
+milestone
+timeline
+scope
+budget
+resource
+risk management
+change management
+communication plan
+project charter
+project plan
+work breakdown structure
+WBS
+Gantt chart
+critical path
+dependency
+constraint
+status report
+retrospective
+sprint
+backlog
+user story
+acceptance criteria
+epic
+

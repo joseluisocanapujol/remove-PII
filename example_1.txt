@@ -1,2 +1,0 @@
-Hello, my name is John Doe. You can reach me at john.doe@example.com or call me at (555) 123-4567. 
-I live at 123 Maple Street, Springfield, IL. My social security number is 123-45-6789. My directory is C:\Users\ja

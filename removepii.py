@@ -1,266 +1,146 @@
-# Author: Porter Zach & Jose L. Ocana-Pujol
+# Author: Jose L. Ocana-Pujol (original Porter Zach
 # Python 3.12
 
 import argparse
 import nltk
-def ensure_nltk_data():
-    """Ensure all required NLTK data is available."""
-    resources = [
-        'punkt',
-        'punkt_tab',
-        'averaged_perceptron_tagger',
-        'averaged_perceptron_tagger_eng',
-        'maxent_ne_chunker',
-        'maxent_ne_chunker_tab',
-        'words'
-    ]
-    for res in resources:
-        try:
-            nltk.data.find(res)
-        except LookupError:
-            nltk.download(res)
-
 import re
 import os
 import pathlib
+from typing import List, Set
+exclusions_file = "exclusions.txt"
 
-def extract(filePath):
-    """Extracts the textual information from a file.
+# Ensure NLTK data is available
+def ensure_nltk_data():
+    """Ensure all required NLTK data is available."""
+    resources = ['punkt', 'averaged_perceptron_tagger', 'maxent_ne_chunker', 'words']
+    for res in resources:
+        nltk.download(res, quiet=True)
 
-    Args:
-        filePath (str): The path to the file to extract text from.
-
-    Raises:
-        ValueError: If the information could not be extracted due to unsupported file type.
-
-    Returns:
-        str: The text in the provided file.
-    """
-    # get the file extension
+# Extract text from files
+def extract(filePath: str, encoding="utf-8") -> str:
+    """Extracts the textual information from a file."""
     ext = pathlib.Path(filePath).suffix
 
-    # extract all data from pure text files
-    if ext == ".txt" or ext == ".md":
-        text = None
-        with open(filePath) as file:
-            text = file.read()
-        return text
-
-    # get the text from PDFs
-    if ext == ".pdf":
+    if ext in [".txt", ".md"]:
+        with open(filePath, encoding=encoding) as file:
+            return file.read()
+    elif ext == ".pdf":
         from pdfminer.high_level import extract_text
         return extract_text(filePath)
-
-    # get the text minus tags from HTML files
-    if ext == ".html" or ext == ".htm":
+    elif ext in [".html", ".htm"]:
         from bs4 import BeautifulSoup
-        with open(filePath) as file:
+        with open(filePath, encoding=encoding) as file:
             soup = BeautifulSoup(file, "html.parser")
         return soup.get_text()
+    else:
+        raise ValueError(f"Unsupported file type: {ext}. Supported types are TXT, PDF, HTML.")
 
-    raise ValueError(f"Text from file {filePath} could not be extracted. Supported types are TXT, PDF, HTML.")
-
-def getNE(text, piiNE):
-    """Gets the named entities classified as PII in the text.
-
-    Args:
-        text (str): The text to analyze.
-        piiNE (list): The types of named entities classified as PII that should be removed. Options: PERSON, ORGANIZATION, GPE, LOCATIOn.
-
-    Returns:
-        set: The set of strings holding named entity PII.
-    """
-    # search for NLTK required data in this directory so the user doesn't need to download it separately
+def getNE(text: str, piiNE: List[str]) -> Set[str]:
+    """Gets the named entities classified as PII in the text."""
     ensure_nltk_data()
-    nltk.data.path.append(os.getcwd())
-    # gets all of the named entities in the text
     ne = nltk.ne_chunk(nltk.pos_tag(nltk.word_tokenize(text)))
-    pii = []
+    pii = set()
 
-    # checks if a subtree contains PII (i.e. it should be removed)
-    def filterPII(x):
-        return x.label() in piiNE
+        # Read exclusions from the file
+    with open(exclusions_file, "r") as file:
+        exclusions = {line.strip().lower() for line in file}
 
-    # loops through all subtrees with a PII label
-    for sub in ne.subtrees(filter = filterPII):
-        # gets the PII's full text string from the subtree's leaves
-        # ex: [('Google', 'NNP'), ('Science', 'NNP'), ('Fair', 'NNP')] -> Google Science Fair
-        piiStr = " ".join(pair[0] for pair in sub.leaves())
-        # adds the PII string to the list
-        if piiStr not in pii:
-            pii.append(piiStr)
-    
-    # converts to a set before returning to remove duplicates
-    return set(pii)
+    for subtree in ne.subtrees(lambda x: x.label() in piiNE):
+        entity = " ".join(word for word, _ in subtree.leaves())
+        # Normalize entity and exclusions to lowercase for comparison
+        if entity.lower() not in exclusions:
+            pii.add(entity)
+    return pii
 
-def getIDInfo(text, types):
-    """Gets the ID info classified as PII in the text.
-
-    Args:
-        text (str): The text to analyze.
-        types (list): The types of ID info classified as PII that should be removed. Options: EMAIL, PHONE, SSN
-
-    Returns:
-        set: The set of strings holding ID info PII.
-    """
-    # gets whether each ID info type should be removed.
-    phone = "PHONE" in types
-    email = "EMAIL" in types
-    ssn = "SSN" in types
-
-    # return an empty set if we're not looking for any ID info PII
-    if not(phone or email or ssn):
-        return set([])
-
-    # initialize the phone number regex
-    if phone: phoneRegex = re.compile(r'''(
-        (\d{3}|\(\d{3}\))? # area code
-        (\s|-|\.)? # separator
-        (\d{3}) # first 3 digits
-        (\s|-|\.) # separator
-        (\d{4}) # last 4 digits
-        (\s*(ext|x|ext.)\s*(\d{2,5}))? # optional extension
+# Get ID info classified as PII
+def getIDInfo(text: str, types: List[str]) -> Set[str]:
+    """Gets the ID info classified as PII in the text."""
+    patterns = {
+        "PHONE": re.compile(r'''(
+            (\d{3}|\(\d{3}\))?(\s|-|\.)?(\d{3})(\s|-|\.)(\d{4})
+            (\s*(ext|x|ext.)\s*(\d{2,5}))?
+        )''', re.VERBOSE),
+        "EMAIL": re.compile(r'''(
+            [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}
+        )''', re.VERBOSE),
+        "SSN": re.compile(r'''(
+            (?!666|000|9\d{2})\d{3}-(?!00)\d{2}-(?!0{4})\d{4}
         )''', re.VERBOSE)
+    }
 
-    # initialize the email address regex
-    if email: emailRegex = re.compile(r'''(
-        [a-zA-Z0-9._%+-] + # username
-        @ # @symbol
-        [a-zA-Z0-9.-] + # domain
-        (\.[a-zA-Z]{2,4}) # .something
-        )''', re.VERBOSE)
+    pii = set()
+    for key, pattern in patterns.items():
+        if key in types:
+            pii.update(match[0] if isinstance(match, tuple) else match for match in pattern.findall(text))
+    return pii
 
-    # initialize the social security number regex
-    if ssn: ssnRegex = re.compile(r'''(
-        (?!666|000|9\d{2})\d{3} # SSN can't begin with 666, 000 or anything between 900-999
-        - # explicit dash (separating Area and Group numbers)
-        (?!00)\d{2} # don't allow the Group Number to be "00"
-        - # another dash (separating Group and Serial numbers)
-        (?!0{4})\d{4} # don't allow last four digits to be "0000"
-        )''', re.VERBOSE)
-
-    pii = []
-
-    # utility method for getting PII matches
-    def getMatches(pattern, t):
-        # for each match, return the match itself if it is a string or the first member of a tuple match
-        # this is because matches are sometimes tuples of multiple groups, like a phone number match being:
-        # ("800-999-2222", "800", "-", "999", "-", "2222")
-        # However, sometimes the matches are just strings (no groups), so accessing the element at [0] would get the first char, which is not desirable.
-        return [(match if type(match) is str else match[0]) for match in pattern.findall(t)]
-
-    # adds the found phone #s, emails, and SSNs to the PII list
-    if phone: pii += getMatches(phoneRegex, text)
-    if email: pii += getMatches(emailRegex, text)
-    if ssn: pii += getMatches(ssnRegex, text)
-
-    # converts to a set before returning to remove duplicates
-    return set(pii)
-
-def writeFile(text, path):
-    """Writes text to the file path.
-
-    Args:
-        text (str): The text to write.
-        path (str): The path to write the file to.
-    """
+# Write text to a file
+def writeFile(text: str, path: str):
+    """Writes text to the file path."""
     with open(path, "w") as file:
         file.write(text)
 
-def cleanString(text, 
-        verbose = False, 
-        piiNE = ["PERSON", "ORGANIZATION", "GPE", "LOCATION"], 
-        piiNums = ["PHONE", "EMAIL", "SSN"]):
-    """Cleans a string of PII.
+# Clean a string of PII
+def cleanString(text: str, verbose=False, piiNE=None, piiNums=None) -> str:
+    """Cleans a string of PII."""
+    piiNE = piiNE or ["PERSON", "ORGANIZATION", "GPE", "LOCATION"]
+    piiNums = piiNums or ["PHONE", "EMAIL", "SSN"]
 
-    Args:
-        text (str): The text to clean.
-        verbose (bool, optional): Whether status updates should be printed to the console. Defaults to False.
-        piiNE (list, optional): The types of named entity PII to remove. Defaults to all types: ["PERSON", "ORGANIZATION", "GPE", "LOCATION"].
-        piiNums (list, optional): The types of ID info PII to remove. Defaults to all types: ["PHONE", "EMAIL", "SSN"].
+    if verbose:
+        print("Cleaning text: getting named entities and identifiable information...")
+    piiSet = getNE(text, piiNE).union(getIDInfo(text, piiNums))
+    if verbose:
+        print(f"{len(piiSet)} PII strings found.")
 
-    Returns:
-        str: The cleaned text string with PII replaced with XXXXX values.
-    """
-    if verbose: print("Cleaning text: getting named entities and identifiable information...")
-    # combines the NE and ID info PII string sets
-    piiSet = set.union(getNE(text, piiNE), getIDInfo(text, piiNums))
-    if verbose: print(str(len(piiSet)) + " PII strings found.")
-
-    if verbose: print("Removing PII.")
-    # replaces PII with XXXXX values
     cleaned = text
     for pii in piiSet:
         cleaned = cleaned.replace(pii, "XXXXX")
 
-    # Mask directory paths inside the text
-    dir_pattern = re.compile(r'([A-Za-z]:\\[^ \n\r\t]+|/[^ \n\r\t]+)')
-    cleaned = re.sub(dir_pattern, lambda m: mask_directories(m.group()), cleaned)
-
-    # return the cleaned text string
+    cleaned = maskDirectories(cleaned)
     return cleaned
 
-def cleanFile(filePath, outputPath, 
-        verbose = False,
-        piiNE = ["PERSON", "ORGANIZATION", "GPE", "LOCATION"], 
-        piiNums = ["PHONE", "EMAIL", "SSN"]):
-    """Reads a file with PII and saves a copy of that file with PII removed.
-
-    Args:
-        filePath (str): The path to the file with PII.
-        outputPath (str): The path to the cleaned file to be saved.
-        verbose (bool, optional): Whether status updates should be printed to the console. Defaults to False.
-        piiNE (list, optional): The types of named entity PII to remove. Defaults to all types: ["PERSON", "ORGANIZATION", "GPE", "LOCATION"].
-        piiNums (list, optional): The types of ID info PII to remove. Defaults to all types: ["PHONE", "EMAIL", "SSN"].
-    """
-    if verbose: print("Extracting text from " + filePath + "...")
-    # gets the file's text
+# Clean a file of PII
+def cleanFile(filePath: str, outputPath: str, verbose=False, piiNE=None, piiNums=None):
+    """Reads a file with PII and saves a copy with PII removed."""
+    if verbose:
+        print(f"Extracting text from {filePath}...")
     text = extract(filePath)
-    if verbose: print("Text extracted.")
+    if verbose:
+        print("Text extracted.")
 
-    # gets the text without PII
     cleaned = cleanString(text, verbose, piiNE, piiNums)
-    
-    if verbose: print("Writing clean text to " + outputPath + ".")
-    # write the cleaned text to the output file
+    if verbose:
+        print(f"Writing clean text to {outputPath}.")
     writeFile(cleaned, outputPath)
 
-def mask_directories(path):
-    """
-    Masks directory information in a file path with 'XXXXX' to prevent exposing directory structures.
-    Example:
-        'C:\\Users\\Alice\\Documents\\file.txt' -> 'XXXXX\\file.txt'
-        '/home/alice/data/report.pdf' -> 'XXXXX/report.pdf'
-    """
-    # Normalize slashes for consistency
+# Mask directory paths in text
+def maskDirectories(text: str) -> str:
+    """Masks directory information in a file path."""
+    dir_pattern = re.compile(r'([A-Za-z]:\\[^ \n\r\t]+|/[^ \n\r\t]+)')
+    return re.sub(dir_pattern, lambda m: mask_directory(m.group()), text)
+
+def mask_directory(path: str) -> str:
+    """Helper function to mask directory paths."""
     path = path.replace('\\', '/')
-    
-    # Split into components
     parts = path.split('/')
-    
     if len(parts) > 1:
-        # Mask everything except the last part (the file name)
         parts[:-1] = ['XXXXX'] * (len(parts) - 1)
-        return '/'.join(parts)
-    else:
-        # If there’s no directory, return as is
-        return path
+    return '/'.join(parts)
 
-# if this file is being executed on the command line, parse arguments and process the user's file or text
+# Command-line interface
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Removes personally identifiable information (PII) like names and phone numbers from text strings and files.")
-
-    parser.add_argument("-f", nargs=2, dest="path", default=[], metavar=("inputPath","outputPath"), help="the file to remove PII from and the clean output file path")
-    parser.add_argument("-s", dest="text", default=None, help="input a text string to clean")
+    parser = argparse.ArgumentParser(
+        description="Removes personally identifiable information (PII) like names and phone numbers from text strings and files."
+    )
+    parser.add_argument("-f", nargs=2, dest="path", metavar=("inputPath", "outputPath"),
+                        help="The file to remove PII from and the clean output file path.")
+    parser.add_argument("-s", dest="text", help="Input a text string to clean.")
 
     args = parser.parse_args()
 
-    # cleans the user's provided file
-    if len(args.path) == 2:
+    if args.path:
         cleanFile(args.path[0], args.path[1], verbose=True)
-    # cleans the user's provided text
-    elif args.text is not None:
-        s = cleanString(args.text, verbose=True)
-        print("Text with PII removed:\n" + s)
+    elif args.text:
+        print("Text with PII removed:\n" + cleanString(args.text, verbose=True))
     else:
         print("No action specified.")
